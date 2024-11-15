@@ -1,7 +1,9 @@
 FROM node:18
 
-# Instale dependências do sistema necessárias para o Puppeteer
+# Instalar dependências do sistema necessárias para o Puppeteer e Chrome
 RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -12,18 +14,28 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libgtk-3-0 \
     libxshmfence1 \
-    libglu1
+    libglu1 \
+    fonts-liberation \
+    libappindicator3-1 \
+    xdg-utils && \
+    rm -rf /var/lib/apt/lists/*
 
-# Configure o diretório de trabalho
+# Baixar e instalar o Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
+    apt-get update && apt-get install -y google-chrome-stable && \
+    rm -rf /var/lib/apt/lists/*
+
+# Configurar diretório de trabalho
 WORKDIR /app
 
-# Copie o projeto
+# Copiar arquivos do projeto
 COPY . .
 
-# Instale as dependências do Node.js
+# Instalar dependências do Node.js
 RUN npm install
 
-# Exponha a porta
+# Expor a porta do servidor
 EXPOSE 3000
 
 # Comando de inicialização
