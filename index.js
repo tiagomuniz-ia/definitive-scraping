@@ -5,7 +5,7 @@ const app = express();
 
 // Rota raiz
 app.get("/", (req, res) => {
-  res.send("Bem vindo ao Scrapper Google Maps");
+  res.send("Bem vindo ao Scraper Google Maps");
 });
 
 // Rota de busca no Google Maps
@@ -20,10 +20,19 @@ app.get("/search", async (req, res) => {
     const browser = await puppeteer.launch({
       headless: true,
       executablePath: "/usr/bin/google-chrome", // Caminho para o Chrome instalado
-      args: ["--no-sandbox", "--disable-setuid-sandbox"], // Necessário para ambientes como Docker
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--lang=pt-BR", // Define o idioma do navegador como português
+      ],
     });
 
     const page = await browser.newPage();
+
+    // Configura o cabeçalho de idioma
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": "pt-BR,pt;q=0.9",
+    });
 
     // Gera a URL de pesquisa do Google Maps
     const url = `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}`;
