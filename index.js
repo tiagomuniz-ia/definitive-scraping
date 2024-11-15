@@ -12,26 +12,26 @@ app.get("/search", async (req, res) => {
 
   try {
     const browser = await puppeteer.launch({
-      headless: "new", // Usando o novo modo headless
+      headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
     const page = await browser.newPage();
+
     const url = `https://www.google.com/maps/search/${encodeURIComponent(searchTerm)}`;
     await page.goto(url, { waitUntil: "networkidle2" });
 
     console.log(`Pesquisando: ${searchTerm}`);
 
-    // Aumentar o tempo limite
-    const resultsSelector = '[aria-label="Resultados para psicologos em londrina"]';
-    await page.waitForSelector(resultsSelector, { timeout: 60000 });
+    const resultsSelector = `[aria-label="Resultados para ${searchTerm}"]`;
+    await page.waitForSelector(resultsSelector);
 
     let previousHeight;
     while (true) {
       const resultDiv = await page.$(resultsSelector);
       previousHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
       await page.evaluate((el) => el.scrollBy(0, el.scrollHeight), resultDiv);
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 6000));
       const newHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
       if (newHeight === previousHeight) break;
     }
@@ -43,7 +43,10 @@ app.get("/search", async (req, res) => {
 
     await browser.close();
 
-    return res.json({ term: searchTerm, websites });
+    return res.json({
+      term: searchTerm,
+      websites,
+    });
   } catch (error) {
     console.error("Erro ao realizar a pesquisa:", error);
     return res.status(500).json({ error: "Erro ao realizar a pesquisa." });
