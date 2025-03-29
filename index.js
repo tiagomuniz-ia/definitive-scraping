@@ -40,37 +40,87 @@ app.get("/search", async (req, res) => {
 
     console.log(`Pesquisando: ${searchTerm}`);
 
+    // Capturar screenshot para debug
+    await page.screenshot({ path: 'debug-screenshot.png' });
+
     // Seletor para os resultados
     const resultsSelector = `[aria-label="Resultados para ${searchTerm}"]`;
-    await page.waitForSelector(resultsSelector, { timeout: 60000 }); // Aumenta o tempo limite para o carregamento
+    try {
+      await page.waitForSelector(resultsSelector, { timeout: 30000 }); // Reduz o tempo limite para o carregamento
+    } catch (e) {
+      console.log("Aviso: Seletor de resultados não encontrado. Continuando com captura de dados brutos.");
+    }
+    
+    // Capturar o HTML completo da página
+    const pageContent = await page.content();
 
     // Rolar a página até carregar todos os resultados
-    let previousHeight;
-    while (true) {
-      const resultDiv = await page.$(resultsSelector);
-      previousHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
-      await page.evaluate((el) => el.scrollBy(0, el.scrollHeight), resultDiv);
-      await new Promise((resolve) => setTimeout(resolve, 6000)); // Aguarda 6 segundos entre as rolagens
-      const newHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
-      if (newHeight === previousHeight) break; // Sai do loop se não houver mais resultados
+    try {
+      let previousHeight;
+      let scrollAttempts = 0;
+      const maxScrollAttempts = 3; // Limite de tentativas de rolagem
+      
+      while (scrollAttempts < maxScrollAttempts) {
+        const resultDiv = await page.$(resultsSelector);
+        if (!resultDiv) break;
+        
+        previousHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
+        await page.evaluate((el) => el.scrollBy(0, el.scrollHeight), resultDiv);
+        await new Promise((resolve) => setTimeout(resolve, 3000)); // Reduz o tempo de espera entre rolagens
+        
+        const newHeight = await page.evaluate((el) => el.scrollHeight, resultDiv);
+        if (newHeight === previousHeight) break; // Sai do loop se não houver mais resultados
+        
+        scrollAttempts++;
+      }
+    } catch (e) {
+      console.log("Aviso: Erro durante a rolagem. Continuando com os dados disponíveis.");
     }
 
     // Extrair os dados brutos dos resultados
     const rawData = await page.evaluate((resultsSelector) => {
+      console.log("Iniciando extração de dados brutos");
+      
+      // Capturar a estrutura completa da página
+      const pageStructure = {
+        body: document.body.innerHTML
+      };
+      
+      // Tentar múltiplos seletores comuns no Google Maps
       const resultsContainer = document.querySelector(resultsSelector);
-      if (!resultsContainer) return [];
+      let resultElements = [];
       
-      // Obter todos os elementos de resultado
-      const resultElements = resultsContainer.querySelectorAll('[role="article"]');
+      if (resultsContainer) {
+        // Tentar diferentes seletores para os resultados
+        resultElements = resultsContainer.querySelectorAll('[role="article"], .section-result, .gm2-body, div[jsaction*="mouseover"], div[data-result-index], div[data-item-id]');
+        
+        console.log(`Encontrados ${resultElements.length} elementos com os seletores específicos`);
+        
+        // Se não encontrou nada, tenta capturar mais elementos genéricos
+        if (resultElements.length === 0) {
+          resultElements = resultsContainer.querySelectorAll('div > a, div[role="link"], div[role="region"], div[jscontroller]');
+          console.log(`Tentativa com seletores mais genéricos: ${resultElements.length} elementos encontrados`);
+        }
+      }
       
-      // Extrair HTML bruto de cada elemento
-      return Array.from(resultElements).map(element => {
-        return {
-          outerHTML: element.outerHTML,
-          innerHTML: element.innerHTML,
-          textContent: element.textContent
-        };
-      });
+      // Retornar a estrutura completa da página e quaisquer resultados encontrados
+      return {
+        pageStructure: pageStructure,
+        results: Array.from(resultElements || []).map(element => {
+          try {
+            return {
+              outerHTML: element.outerHTML,
+              textContent: element.textContent,
+              attributes: Array.from(element.attributes).map(attr => ({
+                name: attr.name,
+                value: attr.value
+              }))
+            };
+          } catch (e) {
+            return { error: e.toString(), elementType: element.tagName };
+          }
+        })
+      };
     }, resultsSelector);
 
     await browser.close();
@@ -78,8 +128,8 @@ app.get("/search", async (req, res) => {
     // Retorna os resultados brutos como JSON
     return res.json({
       term: searchTerm,
-      rawResults: rawData,
-      count: rawData.length
+      rawData: rawData,
+      fullPageHTML: pageContent
     });
   } catch (error) {
     console.error("Erro ao realizar a pesquisa:", error);
