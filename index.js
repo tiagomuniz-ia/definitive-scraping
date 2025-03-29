@@ -55,18 +55,31 @@ app.get("/search", async (req, res) => {
       if (newHeight === previousHeight) break; // Sai do loop se não houver mais resultados
     }
 
-    // Extrair os websites dos resultados
-    const websites = await page.evaluate(() => {
-      const elements = document.querySelectorAll('[data-value="Website"]');
-      return Array.from(elements).map((el) => el.getAttribute("href"));
-    });
+    // Extrair os dados brutos dos resultados
+    const rawData = await page.evaluate((resultsSelector) => {
+      const resultsContainer = document.querySelector(resultsSelector);
+      if (!resultsContainer) return [];
+      
+      // Obter todos os elementos de resultado
+      const resultElements = resultsContainer.querySelectorAll('[role="article"]');
+      
+      // Extrair HTML bruto de cada elemento
+      return Array.from(resultElements).map(element => {
+        return {
+          outerHTML: element.outerHTML,
+          innerHTML: element.innerHTML,
+          textContent: element.textContent
+        };
+      });
+    }, resultsSelector);
 
     await browser.close();
 
-    // Retorna os resultados como JSON
+    // Retorna os resultados brutos como JSON
     return res.json({
       term: searchTerm,
-      websites,
+      rawResults: rawData,
+      count: rawData.length
     });
   } catch (error) {
     console.error("Erro ao realizar a pesquisa:", error);
